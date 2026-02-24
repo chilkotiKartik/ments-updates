@@ -381,8 +381,56 @@ I) Common troubleshooting micro-steps
 
 ---
 
-If you want, I can now generate one of the following micro-artefacts next:
-- a full endpoint map (every `src/app/api/*` handler → `src/api/*` function → tables/RPCs),
-- a runnable worker template for Redis + BullMQ wired to `createAdminClient()`, or
-- a short CI/CD checklist and PR template to ensure migrations + envs are applied before deploy.
+## Diagrams (visuals)
 
+Below are two Mermaid diagrams you can view in any editor that supports Mermaid or render via mermaid.live.
+
+### Architecture (component) diagram
+
+```mermaid
+flowchart LR
+   Browser(Browser / Client)
+   NextJS(Next.js App\nRoute Handlers\nServer Components)
+   Supabase(Supabase\nPostgres / Auth / Storage)
+   Workers(Workers / Job Queue\nRedis + BullMQ)
+   EdgeFns(Supabase Edge Functions)
+   CDN(CDN / Edge Cache)
+   FF(FFmpeg Media Workers)
+
+   Browser -->|HTTP| NextJS
+   NextJS -->|Auth & Data| Supabase
+   NextJS -->|Enqueue jobs| Workers
+   Workers -->|Writes / Reads| Supabase
+   Workers -->|Media processing| FF
+   Supabase -->|Public assets| CDN
+   NextJS -->|Call Edge Fns| EdgeFns
+   Browser -->|Media GET| CDN
+
+   style NextJS fill:#f9f,stroke:#333,stroke-width:1px
+   style Supabase fill:#efe,stroke:#333
+   style Workers fill:#eef,stroke:#333
+```
+
+### Request flow: GET /api/posts (sequence)
+
+```mermaid
+sequenceDiagram
+   participant B as Browser
+   participant N as Next.js Route
+   participant A as AuthClient
+   participant S as Supabase (RPC)
+   participant DB as Postgres
+
+   B->>N: GET /api/posts?limit=20
+   N->>A: createAuthClient() (reads sb-web-auth cookie)
+   A->>S: auth.getUser()
+   alt user authenticated
+      N->>S: call RPC get_posts_with_counts(env_id, limit, offset)
+      S->>DB: execute RPC
+      DB-->>S: rows
+      S-->>N: posts JSON
+      N-->>B: 200 OK + JSON
+   else unauthorized
+      N-->>B: 401 Unauthorized
+   end
+```
